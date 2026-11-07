@@ -1,4 +1,4 @@
-﻿# Ultralytics  AGPL-3.0 License - https://ultralytics.com/license
+# Ultralytics  AGPL-3.0 License - https://ultralytics.com/license
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ import torch
 from PIL import Image, ImageOps
 
 from ultralytics.data.utils import FORMATS_HELP_MSG, IMG_FORMATS, VID_FORMATS
+from ultralytics.data.multimodal import read_three_modal_image
 from ultralytics.utils import IS_COLAB, IS_KAGGLE, LOGGER, ops
 from ultralytics.utils.checks import check_requirements
 from ultralytics.utils.patches import imread
@@ -480,33 +481,34 @@ class Load3ModalImages:
     """Inference loader that concatenates RGB, infrared, and depth into 9 channels."""
 
     def __init__(self, path, vid_stride=1, batch=1):
-        if isinstance(path, str) and Path(path).is_dir():
-            files = sorted(glob.glob(os.path.join(path, "*.*")))
-        else:
-            files = [path] if isinstance(path, str) else path
-        self.files = [f for f in files if f.rpartition(".")[-1].lower() in IMG_FORMATS]
+        if batch < 1:
+            raise ValueError("Prediction batch size must be positive.")
+        files = []
+        sources = path if isinstance(path, (list, tuple)) else [path]
+        for source in sources:
+            source = Path(source)
+            if source.is_dir():
+                files.extend(str(file) for file in sorted(source.rglob("*")) if file.is_file())
+            elif source.is_file() and source.suffix.lower() == ".txt":
+                for line in source.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line:
+                        files.append(str(source.parent / line[2:]) if line.startswith("./") else line)
+            elif source.is_file():
+                files.append(str(source))
+            else:
+                raise FileNotFoundError(f"Prediction source not found: {source}")
+        self.files = [f for f in files if Path(f).suffix[1:].lower() in IMG_FORMATS]
         self.nf = len(self.files)
+        if not self.nf:
+            raise FileNotFoundError(f"No supported prediction images found: {path}")
         self.bs = batch
         self.count = 0
         self.mode = "image"
 
     def _read_and_concat_3modal(self, f_vis: str) -> np.ndarray:
-        """Read and concatenate the three aligned modalities."""
-        f_ir = f_vis.replace("visible", "infrared")
-        f_depth = f_vis.replace("visible", "depth")
-        im_vis = cv2.imread(f_vis, cv2.IMREAD_COLOR)
-        im_ir = cv2.imread(f_ir, cv2.IMREAD_COLOR)
-        im_depth = cv2.imread(f_depth, -1)
-        if im_vis is None:
-            raise FileNotFoundError(f"Missing RGB image: {f_vis}")
-        if im_ir is None:
-            raise FileNotFoundError(f"Missing infrared image: {f_ir}")
-        if im_depth is None:
-            raise FileNotFoundError(f"Missing depth image: {f_depth}")
-        im_depth = cv2.normalize(im_depth, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-        im_depth = np.asarray(im_depth, dtype=np.uint8)
-        im_depth = cv2.applyColorMap(im_depth, cv2.COLORMAP_JET)
-        return np.concatenate([im_vis, im_ir, im_depth], axis=-1)
+        """Read the three aligned modalities using the shared loader."""
+        return read_three_modal_image(f_vis)
 
     def __iter__(self):
         self.count = 0
@@ -520,12 +522,9 @@ class Load3ModalImages:
                     return paths, imgs, info
                 raise StopIteration
             path = self.files[self.count]
-            try:
-                imgs.append(self._read_and_concat_3modal(path))
-                paths.append(path)
-                info.append(f"image {self.count + 1}/{self.nf} {path}: ")
-            except Exception as e:
-                print(f"Read error: {e}")
+            imgs.append(self._read_and_concat_3modal(path))
+            paths.append(path)
+            info.append(f"image {self.count + 1}/{self.nf} {path}: ")
             self.count += 1
         return paths, imgs, info
 

@@ -160,6 +160,8 @@ class BasePredictor:
         not_tensor = not isinstance(im, torch.Tensor)
         if not_tensor:
             im = np.stack(self.pre_transform(im))
+            if im.shape[-1] != self.model.ch:
+                raise ValueError(f"Expected {self.model.ch} input channels, received {im.shape[-1]}.")
             if im.shape[-1] == 3:
                 im = im[..., ::-1]  # BGR to RGB
             im = im.transpose((0, 3, 1, 2))  # BHWC to BCHW, (n, 3, h, w)

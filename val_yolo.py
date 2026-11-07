@@ -14,7 +14,7 @@ def main():
         device=DEVICE,
         project=str(VAL_PROJECT),
         name=TEST_NAME,
-        conf=0.25,
+        conf=0.001,
         save_txt=True,
         save_conf=True,
     )

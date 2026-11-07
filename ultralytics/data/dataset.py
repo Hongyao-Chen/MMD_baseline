@@ -1,4 +1,4 @@
-﻿# Ultralytics  AGPL-3.0 License - https://ultralytics.com/license
+# Ultralytics  AGPL-3.0 License - https://ultralytics.com/license
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from .augment import (
 )
 from .base import BaseDataset
 from .converter import merge_multi_segment
+from .multimodal import read_three_modal_image
 from .utils import (
     HELP_URL,
     check_file_speeds,
@@ -318,25 +319,8 @@ class YOLO3ModalDataset(YOLODataset):
         super().__init__(*args, data=data, task=task, **kwargs)
 
     def _read_and_concat_3modal(self, f_vis: str) -> np.ndarray:
-        """Read the three modalities and concatenate them along the channel axis."""
-        f_ir = f_vis.replace("visible", "infrared")
-        f_depth = f_vis.replace("visible", "depth")
-
-        im_vis = cv2.imread(f_vis, cv2.IMREAD_COLOR)
-        im_ir = cv2.imread(f_ir, cv2.IMREAD_COLOR)
-        im_depth = cv2.imread(f_depth, -1)
-
-        if im_vis is None:
-            raise FileNotFoundError(f"Missing RGB image: {f_vis}")
-        if im_ir is None:
-            raise FileNotFoundError(f"Missing infrared image: {f_ir}")
-        if im_depth is None:
-            raise FileNotFoundError(f"Missing depth image: {f_depth}")
-
-        im_depth = cv2.normalize(im_depth, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-        im_depth = np.asarray(im_depth, dtype=np.uint8)
-        im_depth = cv2.applyColorMap(im_depth, cv2.COLORMAP_JET)
-        return np.concatenate([im_vis, im_ir, im_depth], axis=-1)
+        """Read the three aligned modalities using the shared loader."""
+        return read_three_modal_image(f_vis)
 
     def load_image(self, i: int, rect_mode: bool = True) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
         """Load one 9-channel multimodal image, using the cache when available."""
@@ -346,6 +330,8 @@ class YOLO3ModalDataset(YOLODataset):
             if fn.exists():
                 try:
                     im = np.load(fn)
+                    if im.ndim != 3 or im.shape[2] != 9 or im.dtype != np.uint8:
+                        raise ValueError("Expected a uint8 nine-channel image cache.")
                 except Exception as e:
                     print(f"Warning: removing corrupted cache {fn}: {e}")
                     Path(fn).unlink(missing_ok=True)

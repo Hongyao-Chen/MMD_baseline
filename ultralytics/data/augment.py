@@ -1111,10 +1111,16 @@ class RandomPerspective:
         M = T @ S @ R @ P @ C  # order of operations (right to left) is IMPORTANT
         # Affine image
         if (border[0] != 0) or (border[1] != 0) or (M != np.eye(3)).any():  # image changed
-            if self.perspective:
-                img = cv2.warpPerspective(img, M, dsize=self.size, borderValue=(114, 114, 114))
-            else:  # affine
-                img = cv2.warpAffine(img, M[:2], dsize=self.size, borderValue=(114, 114, 114))
+            # OpenCV border scalars support at most four channels; share one transform across all bands.
+            bands = [img[..., i : i + 3] for i in range(0, img.shape[2], 3)]
+            warped = []
+            for band in bands:
+                if self.perspective:
+                    band = cv2.warpPerspective(band, M, dsize=self.size, borderValue=(114, 114, 114))
+                else:
+                    band = cv2.warpAffine(band, M[:2], dsize=self.size, borderValue=(114, 114, 114))
+                warped.append(band[..., None] if band.ndim == 2 else band)
+            img = np.concatenate(warped, axis=2)
             if img.ndim == 2:
                 img = img[..., None]
         return img, M, s

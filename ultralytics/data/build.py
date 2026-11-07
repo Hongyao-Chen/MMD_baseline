@@ -230,19 +230,14 @@ def build_yolo_dataset(
     mode: str = "train",
     rect: bool = False,
     stride: int = 32,
-    multi_modal: bool = True,
+    multi_modal: bool = False,
 ) -> Dataset:
     """Build and return a YOLO dataset based on configuration parameters."""
 
 
-    # dataset = YOLOMultiModalDataset if multi_modal else YOLODataset
-
-    multi_modal=True
-
-    #rgbdt
-    if multi_modal: print("Building multi-modal dataset...(RGB+Infrared+Depth)")
-    else:print("Building single modal dataset...(RGB)")
-    dataset = YOLO3ModalDataset if multi_modal else YOLODataset
+    dataset = (
+        YOLO3ModalDataset if data.get("channels", 3) == 9 else YOLOMultiModalDataset if multi_modal else YOLODataset
+    )
 
 
     return dataset(
@@ -427,6 +422,12 @@ def load_inference_source(
         Load a video stream source
         >>> dataset = load_inference_source("rtsp://example.com/stream", vid_stride=2)
     """
+    # Preserve multimodal path lists instead of converting each visible image to a three-channel PIL image.
+    if channels == 9 and isinstance(source, (list, tuple)) and all(isinstance(x, (str, Path)) for x in source):
+        dataset = Load3ModalImages(source, batch=batch)
+        dataset.source_type = SourceTypes()
+        return dataset
+
     source, stream, screenshot, from_img, in_memory, tensor = check_source(source)
     source_type = source.source_type if in_memory else SourceTypes(stream, screenshot, from_img, tensor)
 
@@ -435,17 +436,18 @@ def load_inference_source(
         dataset = LoadTensor(source)
     elif in_memory:
         dataset = source
+    elif channels == 9 and (stream or screenshot):
+        raise ValueError("Nine-channel prediction requires paired image files or a preassembled nine-channel array.")
     elif stream:
         dataset = LoadStreams(source, vid_stride=vid_stride, buffer=buffer, channels=channels)
     elif screenshot:
         dataset = LoadScreenshots(source, channels=channels)
     elif from_img:
         dataset = LoadPilAndNumpy(source, channels=channels)
-    else:
-        #for rgbdt
+    elif channels == 9:
         dataset = Load3ModalImages(source, batch=batch)
-
-        # dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels) #rgb only
+    else:
+        dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
 
     # Attach source types to the dataset
     setattr(dataset, "source_type", source_type)

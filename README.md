@@ -139,6 +139,8 @@ runs/rgbdt/rgbdt-50epoch/weights/best.pt
 
 Validation results are saved under `runs/val/`. The dataset configuration is passed explicitly, with `split="val"` evaluating `Test1000` in the current configuration. This uses the test set for model selection; reserve an independent test set if you need an unbiased final evaluation.
 
+Validation uses `conf=0.001` to retain low-confidence detections when calculating precision-recall curves and mAP. Prediction exports use `conf=0.25`.
+
 ## Testing
 
 The test entry point is `test_yolo.py`:
@@ -165,5 +167,8 @@ Other `dataset_tools` scripts also use paths under the project's `data` director
 
 - Training and testing require RGB, infrared, and depth images.
 - All three modalities must be spatially aligned and use matching filename stems.
-- `ultralytics/data/build.py` currently selects the three-modal dataset, so inputs are processed as nine channels.
+- The dataset and prediction loaders select nine-channel processing when the dataset or model declares nine input channels. Internal three-channel models, including the AMP check model, use the standard loader.
+- Training and prediction share the same modality reader. Depth inputs must be single-channel images, and all three images must have identical spatial dimensions.
+- Geometric augmentation applies the same transform to each three-channel modality to preserve alignment and avoid OpenCV channel limits.
+- Prediction accepts visible image files, directories (including subdirectories), image list files, or lists of paths. Read failures raise errors rather than silently omitting samples.
 - Run scripts from the project root on both Windows and Linux to resolve relative paths correctly.

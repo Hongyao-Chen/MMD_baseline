@@ -4,6 +4,8 @@ from ultralytics import YOLO
 from ultralytics.data.utils import IMG_FORMATS
 from ultralytics.utils import DATASETS_DIR, YAML
 
+from multimodal_config import DATA_CONFIG, DEVICE, MODEL_CONFIG, RUN_NAME, TRAIN_DIR, TRAIN_PROJECT
+
 
 def has_training_data(data_file):
     """Skip training when a configured image directory is missing or empty."""
@@ -41,19 +43,23 @@ def has_training_data(data_file):
 
 def main():
     """Check local data before constructing the model and starting training."""
-    data_file = Path("ultralytics/cfg/datasets/JNU_MMDet.yaml")
+    data_file = DATA_CONFIG
     if not has_training_data(data_file):
         return
 
-    model = YOLO("ultralytics/cfg/models/JNU/jnu-rgbdt-fusion-yolo11.yaml")
+    if TRAIN_DIR.exists():
+        raise FileExistsError(f"Training directory already exists: {TRAIN_DIR}. Change RUN_NAME in multimodal_config.py.")
+
+    model = YOLO(str(MODEL_CONFIG))
     return model.train(
         data=str(data_file),
         epochs=50,
         imgsz=1024,
         batch=16,
-        device="0",
-        project="runs/rgbdt",
-        name="rgbdt-50epoch",
+        device=DEVICE,
+        project=str(TRAIN_PROJECT),
+        name=RUN_NAME,
+        exist_ok=True,
         close_mosaic=10,
         pretrained=True,
         show_labels=True,

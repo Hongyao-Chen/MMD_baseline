@@ -1,4 +1,4 @@
-﻿# JNU Multimodal YOLO11
+# Multimodal YOLO11
 
 This project performs object detection using RGB, infrared, and depth images. Data, model, and output paths are relative to the project root.
 
@@ -29,10 +29,10 @@ python -m pip install torch==2.8.0+cpu torchvision==0.23.0+cpu --index-url https
 python -m pip install -e .
 ```
 
-Set the device argument inside `model.train(...)` to:
+Set the shared device in `multimodal_config.py` for training, validation, and testing:
 
 ```python
-device="cpu",
+DEVICE = "cpu"
 ```
 
 CPU training is slow. For an initial check, use `epochs=1`, `batch=1`, `imgsz=640`, and `workers=0`.
@@ -64,7 +64,7 @@ python -c "import torch; print(torch.__version__); print(torch.version.cuda); pr
 
 The GPU example should report `2.8.0+cu126`, `12.6`, and `True`. The CPU example should report `2.8.0+cpu`, `None`, and `False`.
 
-Once the GPU is available, change the three-modal training script's default `device="cpu"` to `device="0"` for the first GPU. In other scripts, `device="3"` selects the fourth GPU; adjust it for your hardware.
+Once the GPU is available, set `DEVICE = "0"` in `multimodal_config.py` for the first GPU. This is the current default; CPU installations must change it to `"cpu"`.
 
 `pip install -e .` installs this project and its remaining dependencies so training uses the local modified `ultralytics` source. It does not automatically select CUDA-enabled PyTorch based on your GPU, so install the desired PyTorch version first.
 
@@ -90,7 +90,7 @@ Depth images are min-max normalized and converted to Jet color maps. RGB, infrar
 
 ## Dataset Configuration
 
-The configuration file is `ultralytics/cfg/datasets/JNU_MMDet.yaml`:
+The configuration file is `ultralytics/cfg/datasets/multimodal.yaml`:
 
 ```yaml
 path: .
@@ -123,7 +123,11 @@ The best weights are saved to:
 runs/rgbdt/rgbdt-50epoch/weights/best.pt
 ```
 
-The model configuration is `ultralytics/cfg/models/JNU/jnu-rgbdt-fusion-yolo11.yaml`. Its first layer, `ThreeModalFusion`, extracts features from each modality and combines them using channel and spatial attention.
+The model configuration is `ultralytics/cfg/models/multimodal/rgbdt-fusion-yolo11.yaml`. Its first layer, `ThreeModalFusion`, extracts features from each modality and combines them using channel and spatial attention.
+
+`multimodal_config.py` defines the shared device, experiment name, checkpoint path, and absolute output paths. Training refuses an existing experiment directory to prevent overwriting results or silently selecting a numbered directory. Change `RUN_NAME` for a new experiment; validation and testing will then use that experiment's checkpoint automatically. The RGB-only training entry point has been removed.
+
+The corrected spatial attention layer outputs three modality weights. Checkpoints created with the previous implementation are incompatible with the corrected layer; retrain the model before validation or testing.
 
 ## Validation
 
@@ -133,7 +137,7 @@ The validation entry point is `val_yolo.py`. It loads the following weights by d
 runs/rgbdt/rgbdt-50epoch/weights/best.pt
 ```
 
-Validation results are saved under `runs/val/`. Update the relative paths in the script when changing experiment names or weights.
+Validation results are saved under `runs/val/`. The dataset configuration is passed explicitly, with `split="val"` evaluating `Test1000` in the current configuration. This uses the test set for model selection; reserve an independent test set if you need an unbiased final evaluation.
 
 ## Testing
 
@@ -149,7 +153,7 @@ The script reads `data/Test1000/visible/`, pairs the infrared and depth images, 
 runs/detect/test/rgbdt-test1000/
 ```
 
-Edit the script to change the weights, test directory, GPU index, or output name. Change `name` if the output directory already exists.
+Testing uses the dataset configuration's `test` path, falling back to `val` when `test` is empty. Configure the device and output name in `multimodal_config.py`. Repeated predictions use automatically numbered output directories, and label archives are created in the actual prediction directory. Predictions are streamed to avoid retaining all nine-channel test images in memory.
 
 ## Data Checks
 

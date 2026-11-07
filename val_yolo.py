@@ -1,12 +1,24 @@
-﻿# Evaluate the model on the validation set.
 from ultralytics import YOLO
 
-model = YOLO("runs/rgbdt/rgbdt-50epoch/weights/best.pt")
-metrics = model.val(
-    device="0",
-    project="runs/val",
-    name="rgbdt-test1000",
-    conf=0.25,
-    save_txt=True,
-    save_conf=True,
-)
+from multimodal_config import DATA_CONFIG, DEVICE, TEST_NAME, VAL_PROJECT, WEIGHTS
+
+
+def main():
+    """Evaluate the configured checkpoint using the test set mapped to val."""
+    if not WEIGHTS.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {WEIGHTS}. Complete training first.")
+    model = YOLO(str(WEIGHTS))
+    return model.val(
+        data=str(DATA_CONFIG),
+        split="val",
+        device=DEVICE,
+        project=str(VAL_PROJECT),
+        name=TEST_NAME,
+        conf=0.25,
+        save_txt=True,
+        save_conf=True,
+    )
+
+
+if __name__ == "__main__":
+    metrics = main()

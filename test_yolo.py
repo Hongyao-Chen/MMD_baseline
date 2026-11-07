@@ -1,36 +1,47 @@
-﻿import os
 import shutil
+from pathlib import Path
 
 from ultralytics import YOLO
+from ultralytics.data.utils import check_det_dataset
 
-task = "detect"
-project = "test"
-name = "rgbdt-test1000"
-output_dir = os.path.join("runs", task, project, name)
+from multimodal_config import DATA_CONFIG, DEVICE, TEST_NAME, TEST_PROJECT, WEIGHTS
 
-if os.path.exists(output_dir):
-    raise FileExistsError(f"Output directory already exists: {output_dir}. Change 'name' or remove the old directory.")
 
-model = YOLO("runs/rgbdt/rgbdt-50epoch/weights/best.pt")
-result = model(
-    source="data/Test1000/visible/",
-    imgsz=1024,
-    device="3",
-    project=project,
-    name=name,
-    save=False,
-    visualize=False,
-    save_txt=True,
-    save_conf=True,
-    save_crop=False,
-    conf=0.25,
-)
+def main():
+    """Predict on the configured test images and archive the actual output labels."""
+    if not WEIGHTS.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {WEIGHTS}. Complete training first.")
+    data = check_det_dataset(str(DATA_CONFIG), autodownload=False)
+    source = data.get("test") or data["val"]
+    model = YOLO(str(WEIGHTS))
+    for _ in model(
+        source=source,
+        stream=True,
+        imgsz=1024,
+        device=DEVICE,
+        project=str(TEST_PROJECT),
+        name=TEST_NAME,
+        save=False,
+        visualize=False,
+        save_txt=True,
+        save_conf=True,
+        save_crop=False,
+        conf=0.25,
+    ):
+        pass
 
-result_labels_path = os.path.join(output_dir, "labels")
-zip_file_name = os.path.join(output_dir, f"{name}_labels")
-if os.path.exists(result_labels_path):
-    print(f"Creating archive: {zip_file_name}.zip ...")
-    shutil.make_archive(base_name=zip_file_name, format="zip", root_dir=result_labels_path)
-    print(f"Archive created: {os.path.abspath(zip_file_name + '.zip')}")
-else:
-    print("Labels directory not found.")
+    output_dir = Path(model.predictor.save_dir)
+    labels_dir = output_dir / "labels"
+    if labels_dir.is_dir():
+        archive = shutil.make_archive(
+            base_name=str(output_dir / f"{output_dir.name}_labels"),
+            format="zip",
+            root_dir=str(labels_dir),
+        )
+        print(f"Archive created: {archive}")
+    else:
+        print(f"No prediction labels generated: {labels_dir}")
+
+
+if __name__ == "__main__":
+    main()

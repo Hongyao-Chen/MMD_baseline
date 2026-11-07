@@ -76,7 +76,8 @@ class ThreeModalFusion(nn.Module):
         )
 
         self.spatial_attn = nn.Sequential(
-            Conv(c2 * 3, c2, k=3, s=1),  # ?            nn.Conv2d(c2, 3, kernel_size=1, bias=False)
+            Conv(c2 * 3, c2, k=3, s=1),
+            nn.Conv2d(c2, 3, kernel_size=1, bias=False),
         )
 
     def forward(self, x):

@@ -4,7 +4,7 @@ train: data/Train2000/visible/
 val: data/Test1000/visible/
 test:
 
-channels: 9 # RGB+T+D
+channels: 7 # RGB (3) + infrared (3) + depth (1)
 
 # Classes
 names:

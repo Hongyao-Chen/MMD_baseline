@@ -19,6 +19,7 @@ lib64/
 parts/
 sdist/
 var/
+data/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
@@ -209,6 +210,7 @@ results.csv
 
 # Local dataset caches
 *.cache
+/ultralytics/cfg/datasets/splits/
 
 # Windows metadata
 Thumbs.db

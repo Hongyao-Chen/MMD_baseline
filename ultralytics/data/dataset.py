@@ -300,7 +300,7 @@ class YOLODataset(BaseDataset):
                 value = torch.stack(value, 0)
             elif k == "visuals":
                 value = torch.nn.utils.rnn.pad_sequence(value, batch_first=True)
-            if k in {"masks", "keypoints", "bboxes", "cls", "segments", "obb"}:
+            elif k in {"masks", "keypoints", "bboxes", "cls", "segments", "obb"}:
                 value = torch.cat(value, 0)
             new_batch[k] = value
         new_batch["batch_idx"] = list(new_batch["batch_idx"])
@@ -311,11 +311,11 @@ class YOLODataset(BaseDataset):
 
 
 class YOLO3ModalDataset(YOLODataset):
-    """YOLO dataset that loads aligned RGB, infrared, and depth images as 9 channels."""
+    """YOLO dataset that loads RGB, infrared, and depth images as seven channels."""
 
     def __init__(self, *args, data: dict | None = None, task: str = "detect", **kwargs):
         data = {} if data is None else data
-        data["channels"] = 9
+        data["channels"] = 7
         super().__init__(*args, data=data, task=task, **kwargs)
 
     def _read_and_concat_3modal(self, f_vis: str) -> np.ndarray:
@@ -323,15 +323,15 @@ class YOLO3ModalDataset(YOLODataset):
         return read_three_modal_image(f_vis)
 
     def load_image(self, i: int, rect_mode: bool = True) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
-        """Load one 9-channel multimodal image, using the cache when available."""
+        """Load one seven-channel multimodal image, using the cache when available."""
         im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
 
         if im is None:
             if fn.exists():
                 try:
                     im = np.load(fn)
-                    if im.ndim != 3 or im.shape[2] != 9 or im.dtype != np.uint8:
-                        raise ValueError("Expected a uint8 nine-channel image cache.")
+                    if im.ndim != 3 or im.shape[2] != 7 or im.dtype != np.uint8:
+                        raise ValueError("Expected a uint8 seven-channel image cache.")
                 except Exception as e:
                     print(f"Warning: removing corrupted cache {fn}: {e}")
                     Path(fn).unlink(missing_ok=True)
@@ -364,10 +364,16 @@ class YOLO3ModalDataset(YOLODataset):
         return self.ims[i], self.im_hw0[i], self.im_hw[i]
 
     def cache_images_to_disk(self, i: int) -> None:
-        """Cache the concatenated 9-channel array on disk."""
+        """Cache the concatenated seven-channel array on disk."""
         f = self.npy_files[i]
-        if not f.exists():
-            np.save(f.as_posix(), self._read_and_concat_3modal(self.im_files[i]), allow_pickle=False)
+        if f.exists():
+            try:
+                cached = np.load(f, allow_pickle=False)
+                if cached.ndim == 3 and cached.shape[2] == 7 and cached.dtype == np.uint8:
+                    return
+            except (OSError, ValueError, EOFError):
+                pass
+        np.save(f.as_posix(), self._read_and_concat_3modal(self.im_files[i]), allow_pickle=False)
 
     def build_transforms(self, hyp: dict | None = None) -> Compose:
         if self.augment:
@@ -393,6 +399,7 @@ class YOLO3ModalDataset(YOLODataset):
             )
         )
         return transforms
+
 
 class YOLOMultiModalDataset(YOLODataset):
     """Dataset class for loading object detection and/or segmentation labels in YOLO format with multi-modal support.

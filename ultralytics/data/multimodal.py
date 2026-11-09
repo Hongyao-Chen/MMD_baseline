@@ -7,7 +7,7 @@ import numpy as np
 
 
 def read_three_modal_image(filename):
-    """Load nine BGR channels, replacing only the visible directory component."""
+    """Load aligned RGB, infrared, and depth data as a seven-channel uint8 image."""
     visible = Path(filename)
     parts = list(visible.parts)
     if "visible" not in parts[:-1]:
@@ -25,12 +25,25 @@ def read_three_modal_image(filename):
             raise ValueError(f"Unable to decode {modality} image: {path}")
         if modality == "depth":
             if image.ndim == 3 and image.shape[2] == 1:
-                image = image[..., 0]
-            if image.ndim != 2:
-                raise ValueError(f"Expected a single-channel depth image: {path}")
-            image = cv2.normalize(image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-            image = cv2.applyColorMap(image.astype(np.uint8), cv2.COLORMAP_JET)
-        if images and image.shape[:2] != images[0].shape[:2]:
-            raise ValueError(f"Modality image dimensions do not match: {path}")
+                image = image[:, :, 0]
+            elif image.ndim == 3 and image.shape[2] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            elif image.ndim == 3 and image.shape[2] == 4:
+                image = cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
+            elif image.ndim != 2:
+                raise ValueError(f"Unsupported depth image shape {image.shape}: {path}")
+            if image.dtype != np.uint8:
+                if image.dtype == np.uint16:
+                    # Convert in place to avoid a full-resolution float32 temporary array.
+                    np.right_shift(image, 8, out=image)
+                    image = image.astype(np.uint8)
+                elif np.issubdtype(image.dtype, np.integer):
+                    max_value = np.iinfo(image.dtype).max
+                    image //= max(1, max_value // 255)
+                    image = np.clip(image, 0, 255).astype(np.uint8)
+                else:
+                    np.clip(image, 0.0, 255.0, out=image)
+                    image = image.astype(np.uint8)
+            image = image[..., None]
         images.append(image)
     return np.concatenate(images, axis=-1)

@@ -478,7 +478,7 @@ class LoadImagesAndVideos:
 
 # new add for rgbdt
 class Load3ModalImages:
-    """Inference loader that concatenates RGB, infrared, and depth into 9 channels."""
+    """Inference loader that concatenates RGB, infrared, and depth into seven channels."""
 
     def __init__(self, path, vid_stride=1, batch=1):
         if batch < 1:
@@ -502,6 +502,12 @@ class Load3ModalImages:
         self.nf = len(self.files)
         if not self.nf:
             raise FileNotFoundError(f"No supported prediction images found: {path}")
+        stems = set()
+        for filename in self.files:
+            stem = Path(filename).stem.casefold()
+            if stem in stems:
+                raise ValueError(f"Duplicate prediction filename stem would overwrite output labels: {filename}")
+            stems.add(stem)
         self.bs = batch
         self.count = 0
         self.mode = "image"

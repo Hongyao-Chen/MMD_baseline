@@ -64,7 +64,7 @@ class ThreeModalFusion(nn.Module):
 
         self.conv_rgb = Conv(3, c2, k, s, autopad(k, p, d), g, d, act)
         self.conv_ir = Conv(3, c2, k, s, autopad(k, p, d), g, d, act)
-        self.conv_depth = Conv(3, c2, k, s, autopad(k, p, d), g, d, act)
+        self.conv_depth = Conv(1, c2, k, s, autopad(k, p, d), g, d, act)
 
 
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
@@ -81,15 +81,11 @@ class ThreeModalFusion(nn.Module):
         )
 
     def forward(self, x):
-
-        if x.shape[1] == 9:
-            f_rgb = self.conv_rgb(x[:, 0:3, :, :])
-            f_ir = self.conv_ir(x[:, 3:6, :, :])
-            f_depth = self.conv_depth(x[:, 6:9, :, :])
-        else:
-            f_rgb = self.conv_rgb(x)
-            f_ir = self.conv_ir(x)
-            f_depth = self.conv_depth(x)
+        if x.shape[1] != 7:
+            raise ValueError(f"ThreeModalFusion expects 7 input channels, but received {x.shape[1]}.")
+        f_rgb = self.conv_rgb(x[:, 0:3])
+        f_ir = self.conv_ir(x[:, 3:6])
+        f_depth = self.conv_depth(x[:, 6:7])
 
         f_cat = torch.cat([f_rgb, f_ir, f_depth], dim=1)  # (B, c2*3, H', W')
 

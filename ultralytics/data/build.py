@@ -236,7 +236,7 @@ def build_yolo_dataset(
 
 
     dataset = (
-        YOLO3ModalDataset if data.get("channels", 3) == 9 else YOLOMultiModalDataset if multi_modal else YOLODataset
+        YOLO3ModalDataset if data.get("channels", 3) == 7 else YOLOMultiModalDataset if multi_modal else YOLODataset
     )
 
 
@@ -423,7 +423,7 @@ def load_inference_source(
         >>> dataset = load_inference_source("rtsp://example.com/stream", vid_stride=2)
     """
     # Preserve multimodal path lists instead of converting each visible image to a three-channel PIL image.
-    if channels == 9 and isinstance(source, (list, tuple)) and all(isinstance(x, (str, Path)) for x in source):
+    if channels == 7 and isinstance(source, (list, tuple)) and all(isinstance(x, (str, Path)) for x in source):
         dataset = Load3ModalImages(source, batch=batch)
         dataset.source_type = SourceTypes()
         return dataset
@@ -436,15 +436,15 @@ def load_inference_source(
         dataset = LoadTensor(source)
     elif in_memory:
         dataset = source
-    elif channels == 9 and (stream or screenshot):
-        raise ValueError("Nine-channel prediction requires paired image files or a preassembled nine-channel array.")
+    elif channels == 7 and (stream or screenshot):
+        raise ValueError("Seven-channel prediction requires paired image files or a preassembled seven-channel array.")
     elif stream:
         dataset = LoadStreams(source, vid_stride=vid_stride, buffer=buffer, channels=channels)
     elif screenshot:
         dataset = LoadScreenshots(source, channels=channels)
     elif from_img:
         dataset = LoadPilAndNumpy(source, channels=channels)
-    elif channels == 9:
+    elif channels == 7:
         dataset = Load3ModalImages(source, batch=batch)
     else:
         dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)

@@ -80,13 +80,12 @@ data/
 `-- Test1000/
     |-- visible/
     |-- infrared/
-    |-- depth/
-    `-- labels/
+    `-- depth/
 ```
 
 Images from all three modalities must have identical filenames, including extensions. Labels must share the same filename stem and use the `.txt` extension. Training and testing index files in `visible`; the loader replaces `visible` with `infrared` and `depth` to locate matching images.
 
-Depth images are min-max normalized and converted to Jet color maps. RGB, infrared, and depth each contribute three channels, producing a nine-channel input.
+Depth images are loaded as one channel and converted to `uint8` when required. Visible, infrared, and depth contribute 3, 3, and 1 channels respectively, producing a seven-channel input.
 
 ## Dataset Configuration
 
@@ -96,7 +95,8 @@ The configuration file is `ultralytics/cfg/datasets/multimodal.yaml`:
 path: .
 train: data/Train2000/visible/
 val: data/Test1000/visible/
-channels: 9
+test:
+channels: 7
 ```
 
 Run scripts from the project root. Place `Train2000` and `Test1000` directly under the project's `data` directory.
@@ -109,9 +109,9 @@ The three-modal training entry point is `train_yolo_3modal.py`:
 python train_yolo_3modal.py
 ```
 
-Before training, the script checks the training and validation data paths. If a path is missing, an image directory is empty, or an image list file is empty, it prints an English message and exits normally without starting training or generating weights. Add the missing data and run the script again. Other problems, such as invalid configuration or corrupt images, still raise errors.
+Before training, the script reads only the labeled `train` source and creates a deterministic 70/30 training-validation split. It writes path lists and a derived YAML file under `ultralytics/cfg/datasets/splits/`; it does not generate, copy, or move images. The configured `val` source remains available as the unlabeled test source.
 
-The current settings use 50 epochs, an image size of 1024, and a batch size of 16. Results are saved to:
+The current settings use 50 epochs, an image size of 1024, a batch size of 16, and one data-loading worker. Plot generation is disabled, so training batch previews, label plots, PR/F1 curves, and confusion matrices are not written. Results are saved to:
 
 ```text
 runs/rgbdt/rgbdt-50epoch/
@@ -125,21 +125,9 @@ runs/rgbdt/rgbdt-50epoch/weights/best.pt
 
 The model configuration is `ultralytics/cfg/models/multimodal/rgbdt-fusion-yolo11.yaml`. Its first layer, `ThreeModalFusion`, extracts features from each modality and combines them using channel and spatial attention.
 
-`multimodal_config.py` defines the shared device, experiment name, checkpoint path, and absolute output paths. Training refuses an existing experiment directory to prevent overwriting results or silently selecting a numbered directory. Change `RUN_NAME` for a new experiment; validation and testing will then use that experiment's checkpoint automatically. The RGB-only training entry point has been removed.
+`multimodal_config.py` defines the shared device, experiment name, checkpoint path, and absolute output paths. Training refuses an existing experiment directory to prevent overwriting results or silently selecting a numbered directory. Change `RUN_NAME` for a new experiment; testing will then use that experiment's checkpoint automatically. The repository provides only the three-modal training and testing entry points.
 
 The corrected spatial attention layer outputs three modality weights. Checkpoints created with the previous implementation are incompatible with the corrected layer; retrain the model before validation or testing.
-
-## Validation
-
-The validation entry point is `val_yolo.py`. It loads the following weights by default:
-
-```text
-runs/rgbdt/rgbdt-50epoch/weights/best.pt
-```
-
-Validation results are saved under `runs/val/`. The dataset configuration is passed explicitly, with `split="val"` evaluating `Test1000` in the current configuration. This uses the test set for model selection; reserve an independent test set if you need an unbiased final evaluation.
-
-Validation uses `conf=0.001` to retain low-confidence detections when calculating precision-recall curves and mAP. Prediction exports use `conf=0.25`.
 
 ## Testing
 
@@ -155,7 +143,7 @@ The script reads `data/Test1000/visible/`, pairs the infrared and depth images, 
 runs/detect/test/rgbdt-test1000/
 ```
 
-Testing uses the dataset configuration's `test` path, falling back to `val` when `test` is empty. Configure the device and output name in `multimodal_config.py`. Repeated predictions use automatically numbered output directories, and label archives are created in the actual prediction directory. Predictions are streamed to avoid retaining all nine-channel test images in memory.
+Testing uses the dataset configuration's `test` path, falling back to `val` when `test` is empty. Configure the device and output name in `multimodal_config.py`. Repeated predictions use automatically numbered output directories, and label archives are created in the actual prediction directory. Predictions are streamed to avoid retaining all seven-channel test images in memory. The unlabeled test set is supported, and visualization images are not saved.
 
 ## Data Checks
 
@@ -167,8 +155,10 @@ Other `dataset_tools` scripts also use paths under the project's `data` director
 
 - Training and testing require RGB, infrared, and depth images.
 - All three modalities must be spatially aligned and use matching filename stems.
-- The dataset and prediction loaders select nine-channel processing when the dataset or model declares nine input channels. Internal three-channel models, including the AMP check model, use the standard loader.
+- The dataset and prediction loaders select seven-channel processing when the dataset or model declares seven input channels.
 - Training and prediction share the same modality reader. Depth inputs must be single-channel images, and all three images must have identical spatial dimensions.
 - Geometric augmentation applies the same transform to each three-channel modality to preserve alignment and avoid OpenCV channel limits.
 - Prediction accepts visible image files, directories (including subdirectories), image list files, or lists of paths. Read failures raise errors rather than silently omitting samples.
+- Prediction filenames must have unique stems across the selected inputs because exported labels share one directory. Duplicate stems are rejected to prevent overwriting predictions.
+- Existing disk caches are checked for seven-channel `uint8` data. Invalid caches are regenerated; delete caches manually after changing source images, since same-format caches are not checked for source freshness.
 - Run scripts from the project root on both Windows and Linux to resolve relative paths correctly.

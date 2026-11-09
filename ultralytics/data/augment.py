@@ -658,7 +658,13 @@ class Mosaic(BaseMixTransform):
                 x1a, y1a, x2a, y2a = xc, yc, min(xc + w, s * 2), min(s * 2, yc + h)
                 x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
-            img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+            # Multispectral samples can have different channel counts. Copy the
+            # channels available in both arrays and keep the canvas fill value
+            # for channels that are absent from the source sample.
+            dst = img4[y1a:y2a, x1a:x2a]
+            src = img[y1b:y2b, x1b:x2b]
+            channels = min(dst.shape[2], src.shape[2])
+            dst[..., :channels] = src[..., :channels]
             padw = x1a - x1b
             padh = y1a - y1b
 
